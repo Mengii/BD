@@ -1,0 +1,33 @@
+       SQL> 2+2;
+SP2-0042: unknown command "2+2" - rest of line ignored.
+SQL> select 2+2 from client;
+
+       2+2
+----------
+	 4
+	 4
+	 4
+	 4
+	 4
+
+SQL> select * from dual;
+
+D
+-
+X
+
+SQL> select 2+2 from dual;
+
+       2+2
+----------
+	 4
+
+SQL> select seq_client.nextval from dual;
+
+   NEXTVAL
+----------
+	22
+
+
+
+à refaire chez moi

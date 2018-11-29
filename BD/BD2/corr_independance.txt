@@ -1,0 +1,156 @@
+-------------------------------------------------------------------------------
+-- corr_independance.txt
+-- tp6a
+-- 23 mars 2018
+-------------------------------------------------------------------------------
+
+rappels cours :
+
+question :
+suite a une reorganisation de la base, est-il possible de conserver le
+meme comportement pour les programmes accedant a la base ?
+
+definition :
+- une reorganisation est une mise a jour de la structure des tables et
+  de leur contenu  
+- soit D une base et q une requete sur D, une reorganisation de D en
+  D' est SPI par rapport a q s'il existe q' sur D' donnant le meme
+  resultat que q sur D
+
+principe :
+la reponse a la question ci-dessus est oui ssi la reorganisation est
+SPI pour les requetes des programmes
+
+rem : si une reorganisation n'est pas SPI, alors l'application donne
+des resultats differents, on ne considere pas cette situation
+
+vocabulaire :
+- il y a un probleme d'independance des niveaux si une reorganisation
+  SPI provoque une erreur dans l'un des programmes
+- gerer l'independance des niveaux dans une application consiste a
+  empecher ces erreurs
+
+rem : ces definition et principe ne sont pas formalises ici (les
+concepts sont bien au programme mais pas leur formalisation) 
+
+-------------------------------------------------------------------------------
+rem : on se refere dans ce corrige a la version en ligne du TD
+
+-------------------------------------------------------------------------------
+-- 13.1
+
+rem : c'est p qui tape ce qui suit
+
+-- 13.1.c, 13.1.d 
+-- traitement 2 :
+-- parametres : Rita, idc 1, pour NY le jour 45
+-- gerer l'independance des niveaux :
+select idv, prix, activite
+from village 
+where ville = 'NY' 
+order by prix;
+-- independance des niveaux non geree :
+insert into sejour values(100, 2, 11, 45); 
+-- independance des niveaux non geree :
+update client set avoir = avoir - 60 where idc = 2;
+
+on considere le select de ce traitement
+c'est la requete q de la definition ci-dessus
+
+-- 13.1.e : donner un probleme
+
+-- 13.1.e.i : 
+donner base concrete = tables CC avec contenu 
+ici une seule ligne suffit : village(11, 'NY', 'MOMA', 60, 300)
+c'est la base D de la definition ci-dessus
+
+-- 13.1.e.ii : 
+- reorganisation : 
+- on met dans une table a part les noms des villes, chacun a un identifiant
+  nomVille(idvi, ville)
+  village(idv, idvi, activite, prix, capacite), ou idvi fk nomVille
+- donner les lignes correspondant au contenu donne dans 13.1.e.i :
+  village(11, 101, 'MOMA', 60, 300), nomVille(101, 'NY')
+  c'est la base D'
+
+-- 13.1.e.iii : 
+- cette reorganisation est bien SPI, voici la requete q' donnant
+  le meme resultat sur D' que q sur D :
+  select idv, prix, activite 
+  from village, nomVille 
+  where ville = 'NY' 
+    and village.idvi = nomVille.idvi
+  order by prix
+
+-- 13.1.e.iv : 
+- l'execution de q sur la nouvelle base provoque une erreur :
+  line 3: colonne village.ville n'existe pas
+- une reorganisation SPI a provoque une erreur a l'execution d'un
+  programme : c'est un probleme d'independance des niveaux
+
+-- 13.1.f :
+
+il y a deux etapes dans le temps :
+
+-- 13.1.f.i :
+- etape 1 : on revient au temps de l'ecriture de traitement2 :
+- create view vue_traitement2_select as
+    select idv, prix, activite
+    from village 
+    where ville = 'NY' 
+    order by prix
+- on ecrit traitement2 comme suit :
+  select * from vue_traitement2_select;
+  insert into sejour values(100, 2, 11, 45); 
+  update client set avoir = avoir - 60 where idc = 2;
+- rem : l'appel du traitement 2 fait ce qu'il doit et sans erreur
+
+-- 13.1.f.ii :
+- etape 2 : au moment d'une reorganisation (SPI) : comment eviter
+  l'erreur a l'execution survenue en 13.1.e.iii : 
+- ici appel au traitement 2 est correct
+- p effectue la reorganisation ci-dessus : 
+  il cree : nomVille(idvi, ville)
+  il modifie villlage en : village(idv, idvi, activite, prix,
+    capacite)
+- ici pendant quelques micro-secondes q est en erreur
+- p tape : 
+  create or replace view vue_traitement2_select as
+    select idv, prix, activite 
+    from village, nomVille 
+    where ville = 'NY' 
+      and village.idvi = nomVille.idvi
+    order by prix
+- ici appel au traitement 2 est correct, et fait la meme chose que sur
+  D (cf definitions ci-dessus)
+  rem : le code du traitement 2 n'est jamais modifie
+- du fait de l'acces aux tables exclusivement par une vue definie par
+  q, toute reorganisation SPI par rapport a q est geree en
+  redefinissant la vue a q', et aucun probleme d'independance des
+  niveaux n'a lieu : l'independance des niveaux est donc geree pour le
+  traitement 2
+
+-- 13.1.g :
+-- 13.1.g.i :
+renommage table et colonnes, couper la table a differents endroits,
+voire en trois tables, en conservant une fk pour reconstruire
+jointure (sauf colonne capacite car elle n'intervient pas dans q)
+-- 13.1.g.ii :
+drop colonne capacite : SPI par rapport a q car q n'utilise pas
+capacite ; pas de probleme d'independance des niveaux
+-- 13.1.g.iii :
+drop colonne prix, autre colonne (sauf capacite)
+couper table sans conserver fk : jointure impossible
+dans tous ces cas il n'existe pas de q'
+-- 13.1.g.iv :
+par exemple : on coupe client en deux tables, en mettant avoir dans
+celle qui n'est pas client (meme principe que pour les select)
+
+-- 13.1.h : facultatif pour entrainement personnel des etudiants
+
+-- 13.2 :
+on considere la procedure PL/SQL traitement2 ecrite au TD 3 ; en
+regardant son code, on voit que les questions et les reponses de 13.1
+sont exactement les memes l'independance des niveaux, probleme et
+solution, ne depend pas de si les ordres SQL sont inclus dans un
+langage, et lequel 

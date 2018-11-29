@@ -1,0 +1,406 @@
+-------------------------------------------------------------------------------
+corr_confidentialite.txt
+tp7a
+30 mars 2018
+-------------------------------------------------------------------------------
+-- 7.2
+-- synthese : vues, grants sur table, dictionnaire de donnees, encapsulation et
+-- expressivite
+
+-------------------------------------------------------------------------------
+-- 7.2.a
+-- rappel actions et ordres SQL correspondants :
+-- on se referera dans tout le corrige a ces actions par leur numero, sans 
+-- rappeler les ordres
+
+programmeur :
+0.a. (action 0.a) creation des tables avec contraintes, des sequences
+0.b. attribution des droits
+
+employes :
+1. (action 1) creer villages (insert village)
+2. consulter villages (select village)
+3. modifier villages (update activite et capacite dans village)
+4. consulter sejours (select sejour)
+5. traitement 3 (j) =
+     select count(*) from sejour where jour<j
+     delete sejour where jour<j
+
+clients :
+6. traitement 1 (n,a) = 
+     insert client(n,a)
+7. traitement 2 (ic,v,j) =
+     select village where ville = v : iv, p, act
+     insert sejour(ic,iv,j)
+     update client avoir=avoir-p where idc=ic
+8. consulter villages pour lesquels aucun sejour 
+     (select idv,ville activite,prix from village 
+      where idv not in (select idv from sejour))
+9. consulter toutes ses informations (i) : 
+     consulter client (select client where idc=i)
+     consulter sejour (select sejour where idc=i)
+     consulter village (select idv,ville,activite,prix,capacite
+                        from village,sejour 
+                        where village.idv=sejour.idv and idc=i)
+10. authentification en debut de session (i,n) = 
+     select client where idc=i and nom=n
+
+-------------------------------------------------------------------------------
+-- 7.2.b
+-- comptes utilisateurs SGBD :
+
+programmeur : p
+employes : e1, ..., en
+client : c
+
+-------------------------------------------------------------------------------
+-- 7.2.c
+-- identification et suppression des droits existants :
+
+c'est p qui tape sur son compte ce qui suit
+
+identification des droits existants uniquement :
+il faut recuperer toutes autorisations :
+- (u, t, priv)  ou t est une table du CC
+- (u, p, execute) ou p est une procedure du CC
+
+rem : c'est p qui accede aux autorisations sur ses propres tables dans q1 et q2
+
+q1= select grantee, table_name, privilege
+    from user_tab_privs
+    where table_name in ('CLIENT', 'VILLAGE', 'SEJOUR')
+
+q2= select grantee, procedure_name
+    from user_proc_privs
+    where procedure_name in ('TRAITEMENT1', 'TRAITEMENT2',
+    'TRAITEMENT3', 'CONSULTER_INFOS_CLIENT', 'AUTHENTIFICATION')
+  )
+rem : pour simplifier on suppose que user_proc_privs contient les
+    procedures et les functions
+rem : on obtient aussi les u not in {e1, ..., en, c}
+rem : pour simplifier on suppose qu'il n'y a pas de procedures
+    accedant aux tables du CC en-dehors des traitements du CC 
+rem : on a liste uniquement des droits existants
+
+retirer ces droits :
+- pour chaque u dans q1 faire :
+  revoke u.privilege on client, village, sejour from u.grantee
+rem : on retire aussi index, alter (hors module)
+- pour chaque u dans q2 faire :
+  revoke execute on traitement1, traitement2, traitement3 from u.grantee 
+rem : inclut public, qui sera l'un des grantee s'il a un droit
+rem : on a retire uniquement les droits existants (listes par q1 et q2)
+
+-------------------------------------------------------------------------------
+-- 7.2.d
+-- que peut-on programmer avec les grant sur des tables :
+
+c'est p qui tape sur son compte ce qui suit
+
+employes :
+
+1. (action 1) (creer village)
+- necessaire : grant insert village to e1, ..., en 
+  sinon employes ne peuvent pas inserer
+- ce grant permet l'action 1 du CC (creer village : insert village)
+- or tous les insert village sont autorises par le CC, donc ce grant ne permet
+  rien d'interdit
+- donc l'outil grant sur les tables permet de programmer exactement (la 
+  confidentialite de) l'action 1 du CC
+
+rem : les actions du CC n'utilisent que select, insert, update ou delete ; 
+donc si p autorise select, insert, update et delete sur toutes les tables 
+alors toutes les actions du CC sont possibles
+
+2. grant select village e1...en
+- necessaire (meme raisonnement que action 1)
+- permet action 2 (meme raisonnement que action 1)
+- ne permet rien d'interdit (meme raisonnement que action 1)
+- donc l'outil grant sur les tables permet de programmer (exactement) action 2
+  du CC
+
+3. grant update(activite,capacite) village e1...en
+- necessaire 
+- permet action 3
+- ne permet rien d'interdit
+- grant sur tables permet programmer action 3 du CC
+
+4. grant select sejour e1...en
+- necessaire 
+- permet action 4
+- ne permet rien d'interdit
+- grant sur tables permet programmer action 4 du CC
+
+
+5. traitement 3 (j) =
+     select count(*) from sejour where jour<j
+     delete sejour where jour<j
+- necessaires : 
+  grant select sejour e1...en ; rem : deja fait  
+  grant delete sejour e1...en
+- ces deux grant permettent action 5
+- permettent-ils aussi une action interdite par le CC ?
+  * grant select : permet d'autres selects que select count, mais ceux-ci sont
+    autorises aux employes, c'est l'action 4 ; donc le grant select ne permet
+    rien d'interdit
+  * grant delete :
+    - permet action 5 (delete sejour jour<j)
+    - permet aussi une action interdite ;
+      pour montrer cela il faut exhiber un contre-exemple, c'est a dire ici
+      une base concrete et un ordre delete concret :
+
+soit sejour = (x1,y1,z1,1), (x2,y2,z2,2) (ou les xi, yi, zi sont quelconques)
+soit delete sejour where jour > 1
+la base resultant de ce delete est sejour = (x1,y1,z1,1)
+ce delete n'est pas equivalent (c'est a dire qu'il a meme effet sur la base) a
+un ordre de la forme delete sejour where jour<j
+(exceptionnellement montrons-le : 
+cas j=0 ou 1 : rien n'est detruit, donc on n'obtient pas la meme base resultat
+cas j=2 ou plus : (x1,y1,z1,1) est detruit, donc il n'est pas dans la base 
+resultat, donc on n'obtient pas la meme base resultat
+donc quel que soit j, delete sejour where jour > 1 n'est pas de la forme
+delete sejour where jour<j, donc delete sejour where jour > 1 est une action 
+interdite par le CC
+
+rem : dans la suite on ne fera plus de telle "preuve", mais on devra donner le 
+contre-exemple
+
+    en resume :
+    soit p ne fait pas grant delete : et il n'y a pas assez d'actions possibles
+    soit p fait grant delete : et il y a trop d'action possible
+
+donc l'outil grant sur les tables ne permet pas de programmer l'action 5 du CC,
+et donc il ne permet pas de programmer le CC
+
+
+clients :
+
+6. traitement 1 (n,a) = insert client(n,a)
+grant insert client c
+(pour simplifier on ignore le droit execute sur les sequences)
+- necessaire 
+- permet action 6
+- permet insert client(x1,n,a,1500), qui est interdit par le CC (avoir demarre 
+  a 2000) 
+  rem : insert client(...,3000) serait rejete si on considere aussi contraintes
+- grant sur tables ne permet pas de programmer action 6 du CC
+
+7. traitement 2 (ic,v,j) =
+     select village where ville = v : iv, p, act
+     insert sejour(ic,iv,j)
+     update client avoir=avoir-p where idc=ic
+- necessaires : 
+  grant select village c
+  grant insert sejour c
+  grant update(avoir) client c
+- ces trois grant permettent action 7
+- permettent-ils aussi une action interdite par le CC ?
+  * grant select : permet de voir capacite, qui est interdit
+    donc grant tables ne permet pas de programmer action 7 du CC
+
+- voyons d'autres raisons faisant que grant tables ne permet pas programmer CC
+  * grant insert : permet creer un sejour sans payer (update) : interdit par CC
+  * grant update(avoir) :
+    - permet modifier avoir sans creer sejour : interdit par CC
+    - meme si update et fait avec l'insert, permet decrementer d'un prix autre
+      que p, ou meme d'augmenter de p (ou d'un autre entier) : interdit par CC
+    - bref, insert et update ne sont pas "solidarises" (obligatoirement fait
+      ensemble), et meme s'ils sont fait ensemble ils ne sont pas 
+      obligatoirement solidarises concernant le prix p
+
+- cela fait donc au moins 4 raisons pour lesquelles grant tables ne permet
+  pas de programmer l'action 7 du CC
+
+8. consulter villages pour lesquels aucun sejour 
+     (select idv,ville activite,prix from village 
+      where idv not in (select idv from sejour))
+- necessaires :
+  grant select village c
+  grant select sejour c
+- permettent action interdite par le CC :
+  * grant select village : permet voir capacite : interdit par CC
+    donc grant tables ne permet pas de programmer action 8 du CC
+
+- autres action interdites par CC :
+  * grant select sejour : permet voir sejours pas a c
+  * voir village avec des sejours
+
+9. consulter toutes ses informations (i) : 
+     consulter client (select client where idc=i)
+     consulter sejour (select sejour where idc=i)
+     consulter village (select idv,ville,activite,prix,capacite
+                        from village,sejour 
+                        where village.idv=sejour.idv and idc=i)
+- necessaires :
+  grant select client c
+  grant select village c
+  grant select sejour c
+- permettent actions interdites par le CC :
+  * grant select village et grant select sejour : voir toutes raisons action 8 
+  * grant select client : permet voir autres lignes que c : interdit par CC
+
+10. authentification en debut de session (i,n) = 
+     select client where idc=i and nom=n
+- necessaire :
+  grant select client c
+- permettent actions interdites par le CC :
+  * voir action 9 
+
+-------------------------------------------------------------------------------
+-- 12.1.b
+-- que peut-on programmer avec vues qu'on ne pouvait pas avec grant tables :
+
+c'est p qui tape sur son compte ce qui suit
+
+12.1.b.i :
+- une vue ne peut faire qu'un select, donc pas insert, update, delete
+- on ne considere pas (pas vu en cours) insert, update, delete a travers vues,
+  ni vue parametrees par des valeurs
+- donc vue ne gere que action avec uniquement select, et sans parametre
+- liste de ces actions : celles ainsi non programmees en 7.2.d : action 8 ;
+  (9 et 10 sont select avec parametres, et 5, 6 et 7 n'ont pas que select)
+
+8. consulter villages pour lesquels aucun sejour 
+     (select idv,ville activite,prix from village 
+      where idv not in (select idv from sejour))
+- create view village_sans_sejour as
+    select idv,ville activite,prix from village 
+    where idv not in (select idv from sejour)
+  grant select on village_sans_sejour to c
+- permet action 8 CC
+- ne permet aucune action CC interdite car :
+  grant select village, sejour c pas fait, donc aucun acces possible a village,
+  sejour
+- vue avec grant sur table (incluant sur vue) permet programmer action 8 du CC
+
+il reste actions 5, 6, 7, 9 et 10 qui ne peuvent etre programmees avec grant 
+sur tables et vues
+
+-------------------------------------------------------------------------------
+-- 12.1.c
+-- que peut-on programmer avec encapsulation qu'on ne pouvait pas avec grant
+-- tables et vue :
+
+rappel : encapsulation a ete vue en TD exercice 7.1.c
+
+c'est p qui tape sur son compte ce qui suit
+
+5. traitement 3 (j) =
+     select count(*) from sejour where jour<j
+     delete sejour where jour<j
+- p ecrit la procedure PL/SQL traitement3 implantant le traitement 3 du CC
+- grant execute traitement3 e1...en
+- permet l'action 5 du CC
+- ne permet aucun delete sejour
+  (rappel : select sejour ne permettait pas d'action interdite car autorise)
+  ne permet que l'action 5 du CC, donc ne permet aucune action interdite
+- l'outil encapsulation permet de programmer l'action 5 du CC
+
+6. traitement 1 (n,a) = insert client(n,a)
+- p ecrit procedure traitement1
+- grant execute traitement1 c
+- permet action 6 CC
+- ne permet que cette action
+- encapsulation permet programmer action 6 CC
+
+7. traitement 2 (ic,v,j) =
+- p ecrit procedure traitement2
+- grant execute traitement2 c
+- permet action 7 CC
+- ne permet que cette action
+- encapsulation permet programmer action 7 CC
+
+9. consulter toutes ses informations (i) : 
+     consulter client (select client where idc=i)
+     consulter sejour (select sejour where idc=i)
+     consulter village (select idv,ville,activite,prix,capacite
+                        from village,sejour 
+                        where village.idv=sejour.idv and idc=i)
+- p ecrit les procedures :
+  consulter_client(i)=select client where idc=i
+  consulter_sejour(i)=select sejour where idc=i
+  consulter_village(i)=select idv,ville,activite,prix,capacite
+                         from village,sejour 
+                         where village.idv=sejour.idv and idc=i
+- grant execute consulter_client,consulter_sejour, consulter_village c
+- permet action 9 CC
+- ne permet que cette action
+- encapsulation permet programmer action 9 CC
+
+10. authentification en debut de session (i,n) = 
+- p ecrit procedure :
+  authentification(i,n)=select client where idc=i and nom=n
+- grant execute authentification c
+- permet action 10 CC
+- ne permet que cette action
+- encapsulation permet programmer action 10 CC
+
+rem : 
+- quel que soit un traitement d'un CC, en procedant comme ci-dessus pour les 
+  actions 5, 6, 7 9, 10 par encapsulation on permet ce traitement et rien 
+  d'autre
+- en particulier, si le traitement pouvait se programmer par un grant table ou
+  une vue, on peut aussi le programmer par encapsulation (en mettant l'ordre 
+  ou la requete definissant la vue dans la procedure)
+
+-------------------------------------------------------------------------------
+-- 7.2 et 12.1 
+-- resume : comment programmer un CC
+-- on donne dessous directement ce qui est attendu
+
+-- comptes utilisateurs SGBD :
+programmeur : p
+employes : e1, ..., en
+client : c
+
+c'est p qui tape sur son compte ce qui suit
+
+-- identification et suppression des droits existants :
+q1= select grantee, table_name, privilege
+    from user_tab_privs
+    where table_name in ('CLIENT', 'VILLAGE', 'SEJOUR')
+q2= select grantee, procedure_name
+    from user_proc_privs
+    where procedure_name in ('TRAITEMENT1', 'TRAITEMENT2', 'TRAITEMENT3')
+-- pour simplifier on suppose traitements sont procedures (sinon function_name)
+retirer ces droits :
+- pour chaque u dans q1 faire :
+  revoke u.privilege on client, village, sejour from u.grantee
+- pour chaque u dans q2 faire :
+  revoke execute on traitement1, traitement2, traitement3 from u.grantee 
+
+-- programmation des actions :
+employes :
+1. creer village : grant insert village to e1, ..., en 
+2. consulter villages : grant select village e1...en
+3. modifier villages (sauf idv, ville prix) : 
+   grant update(activite,capacite) village e1...en
+4. consulter sejours : grant select sejour e1...en
+5. traitement 3 :
+   p ecrit procedure PL/SQL traitement3 implantant traitement 3 du CC
+   grant execute traitement3 e1...en
+clients :
+6. traitement 1 :
+   create procedure traitement1
+   grant execute traitement1 c
+7. traitement 2 : 
+   create procedure traitement2
+   grant execute traitement2 c
+8. consulter villages pour lesquels aucun sejour :
+   create view village_sans_sejour as
+     select idv,ville activite,prix from village 
+     where idv not in (select idv from sejour)
+   grant select on village_sans_sejour to c
+9. consulter toutes ses informations (i) : 
+   create procedure consulter_client(i)=select client where idc=i
+   create procedure consulter_sejour(i)=select sejour where idc=i
+   create procedure consulter_village(i)=
+     select idv,ville,activite,prix,capacite from village,sejour 
+     where village.idv=sejour.idv and idc=i
+   grant execute consulter_client,consulter_sejour, consulter_village c
+10. authentification en debut de session (i,n) = 
+   create procedure authentification(i,n)=select client where idc=i and nom=n
+   grant execute authentification c
+
+-------------------------------------------------------------------------------
+

@@ -1,0 +1,3 @@
+sqlplus c##mduan_a/mduan_a@dbinfo
+
+sqlplus c##zzhang4_a/zzhang4_a@dbinfo
